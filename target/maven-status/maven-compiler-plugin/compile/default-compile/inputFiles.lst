@@ -1,0 +1,8 @@
+E:\2026\app-azure-cliente\src\main\java\com\empresa\cliente\AppAzureClienteApplication.java
+E:\2026\app-azure-cliente\src\main\java\com\empresa\cliente\dto\ClienteRequest.java
+E:\2026\app-azure-cliente\src\main\java\com\empresa\cliente\dto\ClienteResponse.java
+E:\2026\app-azure-cliente\src\main\java\com\empresa\cliente\entity\Cliente.java
+E:\2026\app-azure-cliente\src\main\java\com\empresa\cliente\handler\ClienteHandler.java
+E:\2026\app-azure-cliente\src\main\java\com\empresa\cliente\repository\ClienteRepository.java
+E:\2026\app-azure-cliente\src\main\java\com\empresa\cliente\router\ClienteRouter.java
+E:\2026\app-azure-cliente\src\main\java\com\empresa\cliente\service\ClienteService.java

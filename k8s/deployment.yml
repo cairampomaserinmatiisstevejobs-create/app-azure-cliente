@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-azure-cliente
+  labels:
+    app: app-azure-cliente
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-azure-cliente
+  template:
+    metadata:
+      labels:
+        app: app-azure-cliente
+    spec:
+      containers:
+        - name: app-azure-cliente
+          image: acrappcliente.azurecr.io/app-azure-cliente:1.0.0
+          ports:
+            - containerPort: 8084
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 30
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-azure-cliente-svc
+spec:
+  type: LoadBalancer
+  selector:
+    app: app-azure-cliente
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8084
