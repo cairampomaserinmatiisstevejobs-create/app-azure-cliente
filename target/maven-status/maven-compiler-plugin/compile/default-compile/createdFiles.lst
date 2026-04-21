@@ -1,8 +1,0 @@
-com\empresa\cliente\handler\ClienteHandler.class
-com\empresa\cliente\AppAzureClienteApplication.class
-com\empresa\cliente\dto\ClienteResponse.class
-com\empresa\cliente\service\ClienteService.class
-com\empresa\cliente\entity\Cliente.class
-com\empresa\cliente\router\ClienteRouter.class
-com\empresa\cliente\repository\ClienteRepository.class
-com\empresa\cliente\dto\ClienteRequest.class
