@@ -1,0 +1,64 @@
+trigger:
+  branches:
+    include:
+      - dev
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  ACR_NAME: acrappcliente
+  ACR_LOGIN_SERVER: acrappcliente.azurecr.io
+  IMAGE_NAME: app-azure-cliente
+  IMAGE_TAG: $(Build.BuildId)
+  AKS_RESOURCE_GROUP: rg-app-azure-cliente
+  AKS_CLUSTER: aks-app-cliente
+  K8S_DEPLOYMENT: app-azure-cliente
+
+stages:
+
+  - stage: Build
+    displayName: Build y Push Docker
+    jobs:
+      - job: BuildJob
+        steps:
+          - task: Maven@4
+            displayName: Maven build
+            inputs:
+              mavenPomFile: pom.xml
+              goals: package -DskipTests
+              javaHomeOption: JDKVersion
+              jdkVersionOption: '21'
+
+          - task: Docker@2
+            displayName: Build imagen Docker
+            inputs:
+              command: build
+              repository: $(ACR_LOGIN_SERVER)/$(IMAGE_NAME)
+              dockerfile: Dockerfile
+              tags: $(IMAGE_TAG)
+
+          - task: Docker@2
+            displayName: Push a ACR
+            inputs:
+              command: push
+              containerRegistry: acr-connection
+              repository: $(IMAGE_NAME)
+              tags: $(IMAGE_TAG)
+
+  - stage: Deploy
+    displayName: Deploy a AKS
+    dependsOn: Build
+    jobs:
+      - job: DeployJob
+        steps:
+          - task: KubernetesManifest@1
+            displayName: Deploy en AKS
+            inputs:
+              action: deploy
+              connectionType: azureResourceManager
+              azureSubscriptionConnection: azure-connection
+              azureResourceGroup: $(AKS_RESOURCE_GROUP)
+              kubernetesCluster: $(AKS_CLUSTER)
+              manifests: k8s/deployment.yml
+              containers: $(ACR_LOGIN_SERVER)/$(IMAGE_NAME):$(IMAGE_TAG)
