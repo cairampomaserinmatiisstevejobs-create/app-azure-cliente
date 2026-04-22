@@ -79,7 +79,7 @@ jobs:
           resource-group: rg-app-azure-cliente
           cluster-name: aks-app-cliente
 
-      - name: Update deployment image
+      - name: Update deployments image
         run: |
           kubectl set image deployment/app-azure-cliente \
             app-azure-cliente=${{ env.IMAGE }}:${{ github.sha }} \
