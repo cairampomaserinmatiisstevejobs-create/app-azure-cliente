@@ -1,5 +1,5 @@
 server:
-  port: 8084
+  port: 8085
 
 spring:
   application:
@@ -13,6 +13,29 @@ spring:
       mode: always
       schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
+
+  # OAuth2 Client Credentials — M2M hacia Guinea/APIM via Entra ID
+  security:
+    oauth2:
+      client:
+        registration:
+          guinea-api:
+            client-id: ${OAUTH_CLIENT_ID:demo-client-id}
+            client-secret: ${OAUTH_CLIENT_SECRET:demo-secret}
+            authorization-grant-type: client_credentials
+            client-authentication-method: client_secret_basic
+            scope: ${OAUTH_SCOPE:openid}
+        provider:
+          guinea-api:
+            token-uri: ${OAUTH_TOKEN_URI:https://login.microsoftonline.com/common/oauth2/v2.0/token}
+
+# Configuración Guinea (viene de App Configuration + Key Vault en Azure)
+guinea:
+  apim:
+    url: ${GUINEA_APIM_URL:https://jsonplaceholder.typicode.com}
+    subscription-key: ${APIM_SUBSCRIPTION_KEY:demo-key}
+  oauth:
+    enabled: ${GUINEA_OAUTH_ENABLED:false}   # false en local, true en AKS
 
 management:
   endpoints:
