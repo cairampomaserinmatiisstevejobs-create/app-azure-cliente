@@ -24,14 +24,14 @@ public class ClienteService {
 
     public Mono<ClienteResponse> buscarPorId(Long id) {
         return repository.findById(id)
-                .switchIfEmpty(Mono.error(new RuntimeException("Cliente no encontrado: " + id)))
+                .switchIfEmpty(Mono.error(new RuntimeException("Cliente no se encontrado: " + id)))
                 .map(ClienteResponse::from);
     }
 
     public Mono<ClienteResponse> crear(ClienteRequest request) {
         return repository.existsByEmail(request.email())
                 .flatMap(existe -> existe
-                        ? Mono.error(new RuntimeException("Email ya registrado: " + request.email()))
+                        ? Mono.error(new RuntimeException("Email ya esta registrado: " + request.email()))
                         : repository.save(Cliente.crear(request.nombre(), request.apellido(),
                                                         request.email(), request.telefono()))
                                     .map(ClienteResponse::from));
