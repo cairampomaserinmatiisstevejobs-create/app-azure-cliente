@@ -55,7 +55,7 @@ jobs:
       - name: Crear PR automático hacia main
         id: pr
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           BRANCH="${GITHUB_REF_NAME}"
           EXISTING=$(gh pr list --head "$BRANCH" --base main --json number --jq '.[0].number' 2>/dev/null || echo "")
@@ -81,7 +81,7 @@ jobs:
     steps:
       - name: Merge PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           gh pr merge ${{ needs.create-pr.outputs.pr_number }} \
             --merge \
