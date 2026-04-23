@@ -5,6 +5,10 @@ on:
     branches:
       - 'feature/**'
 
+permissions:
+  contents: write
+  pull-requests: write
+
 env:
   IMAGE: ${{ secrets.ACR_LOGIN_SERVER }}/app-azure-cliente
 
