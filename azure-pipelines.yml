@@ -3,6 +3,8 @@ trigger:
     include:
       - feature/*
 
+pr: none
+
 variables:
   - group: pipeline-secrets
   - name: IMAGE
