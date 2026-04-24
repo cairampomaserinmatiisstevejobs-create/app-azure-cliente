@@ -98,13 +98,18 @@ stages:
               ISSUE_KEY="$(JIRA_KEY)"
               echo "Creando PR para rama: $BRANCH_NAME | Issue: $ISSUE_KEY"
 
+              ORG="$(System.TeamFoundationCollectionUri)"
+              PROJECT="$(System.TeamProject)"
+
               # Verificar si ya existe PR abierto
               EXISTING=$(az repos pr list \
                 --source-branch "$BRANCH_NAME" \
                 --target-branch main \
                 --status active \
                 --query "[0].pullRequestId" \
-                --output tsv 2>/dev/null || echo "")
+                --output tsv \
+                --org "$ORG" \
+                --project "$PROJECT" 2>/dev/null || echo "")
 
               if [ -n "$EXISTING" ] && [ "$EXISTING" != "None" ]; then
                 echo "PR ya existe: #$EXISTING"
@@ -115,6 +120,8 @@ stages:
                   --target-branch main \
                   --title "[$ISSUE_KEY] Auto PR: $BRANCH_NAME" \
                   --description "Pipeline automatico Azure DevOps desde $BRANCH_NAME — $ISSUE_KEY MSIRILDEV" \
+                  --org "$ORG" \
+                  --project "$PROJECT" \
                   --output json)
                 PR_ID=$(echo "$PR_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['pullRequestId'])")
                 echo "PR creado: #$PR_ID"
@@ -155,7 +162,9 @@ stages:
               az repos pr update \
                 --id "$(PR_ID)" \
                 --status completed \
-                --delete-source-branch false
+                --delete-source-branch false \
+                --org "$(System.TeamFoundationCollectionUri)" \
+                --project "$(System.TeamProject)"
             displayName: "Completar PR"
             env:
               AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
