@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MSIRILDEV — Primera Plataforma de Desarrollo Automatizado con IA en Latinoamérica</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --negro: #0a0a0f;
+    --azul: #0066ff;
+    --azul-claro: #4d9fff;
+    --verde: #00ff88;
+    --gris: #1a1a2e;
+    --gris-texto: #8892a4;
+    --blanco: #f0f4ff;
+  }
+
+  body {
+    background: var(--negro);
+    color: var(--blanco);
+    font-family: 'Courier New', monospace;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 2rem;
+    position: relative;
+    border-bottom: 1px solid #ffffff10;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 40%, #0066ff18 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .badge {
+    display: inline-block;
+    border: 1px solid var(--verde);
+    color: var(--verde);
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    padding: 0.3rem 1rem;
+    border-radius: 2px;
+    margin-bottom: 2rem;
+    text-transform: uppercase;
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 6vw, 4.5rem);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin-bottom: 1.5rem;
+    font-family: 'Arial Black', sans-serif;
+  }
+
+  .hero h1 span { color: var(--azul-claro); }
+
+  .hero p {
+    font-size: clamp(0.9rem, 2vw, 1.1rem);
+    color: var(--gris-texto);
+    max-width: 640px;
+    margin-bottom: 3rem;
+    font-family: Arial, sans-serif;
+  }
+
+  .firma {
+    font-size: 0.75rem;
+    letter-spacing: 0.3em;
+    color: var(--azul);
+    text-transform: uppercase;
+  }
+
+  /* ── SECCIÓN ── */
+  section {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 5rem 2rem;
+    border-bottom: 1px solid #ffffff08;
+  }
+
+  .label {
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    color: var(--azul);
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  h2 {
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    font-family: 'Arial Black', sans-serif;
+    margin-bottom: 2rem;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── PIPELINE VISUAL ── */
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 2rem 0;
+  }
+
+  .stage {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    gap: 1.5rem;
+    align-items: start;
+    position: relative;
+  }
+
+  .stage:not(:last-child) .stage-line {
+    position: absolute;
+    left: 0.9rem;
+    top: 2rem;
+    bottom: -1rem;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--azul), #0066ff40);
+  }
+
+  .stage-dot {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--gris);
+    border: 2px solid var(--azul);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: bold;
+    color: var(--azul-claro);
+    flex-shrink: 0;
+    margin-top: 0.2rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  .stage-content {
+    padding-bottom: 2.5rem;
+  }
+
+  .stage-title {
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: var(--blanco);
+    margin-bottom: 0.3rem;
+    letter-spacing: 0.05em;
+  }
+
+  .stage-desc {
+    font-size: 0.8rem;
+    color: var(--gris-texto);
+    font-family: Arial, sans-serif;
+  }
+
+  .stage-jira {
+    display: inline-block;
+    margin-top: 0.4rem;
+    font-size: 0.7rem;
+    color: var(--verde);
+    border: 1px solid #00ff8840;
+    padding: 0.1rem 0.5rem;
+    border-radius: 2px;
+  }
+
+  /* ── ESCENARIOS ── */
+  .scenarios {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+
+  @media (max-width: 640px) {
+    .scenarios { grid-template-columns: 1fr; }
+  }
+
+  .scenario-card {
+    background: var(--gris);
+    border: 1px solid #ffffff10;
+    border-radius: 4px;
+    padding: 1.5rem;
+  }
+
+  .scenario-card h3 {
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--azul-claro);
+    margin-bottom: 1rem;
+  }
+
+  .code {
+    background: #000;
+    border-left: 2px solid var(--azul);
+    padding: 0.8rem 1rem;
+    font-size: 0.75rem;
+    color: var(--verde);
+    border-radius: 0 2px 2px 0;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 0.8rem 0;
+  }
+
+  .scenario-card p {
+    font-size: 0.78rem;
+    color: var(--gris-texto);
+    font-family: Arial, sans-serif;
+  }
+
+  /* ── STACK ── */
+  .stack-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .stack-item {
+    border: 1px solid #ffffff10;
+    padding: 1rem;
+    border-radius: 2px;
+    background: var(--gris);
+  }
+
+  .stack-item .tech {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: var(--blanco);
+    margin-bottom: 0.25rem;
+  }
+
+  .stack-item .role {
+    font-size: 0.7rem;
+    color: var(--gris-texto);
+    font-family: Arial, sans-serif;
+  }
+
+  /* ── STAT ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .stat {
+    border-top: 2px solid var(--azul);
+    padding-top: 1rem;
+  }
+
+  .stat-num {
+    font-size: 2.5rem;
+    font-family: 'Arial Black', sans-serif;
+    color: var(--azul-claro);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--gris-texto);
+    font-family: Arial, sans-serif;
+    margin-top: 0.25rem;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center;
+    padding: 4rem 2rem;
+    border-top: 1px solid #ffffff08;
+  }
+
+  footer .msirildev {
+    font-size: 1.5rem;
+    font-family: 'Arial Black', sans-serif;
+    letter-spacing: 0.3em;
+    color: var(--azul-claro);
+    margin-bottom: 0.5rem;
+  }
+
+  footer p {
+    font-size: 0.75rem;
+    color: var(--gris-texto);
+    font-family: Arial, sans-serif;
+  }
+
+  /* ── GLITCH CURSOR ── */
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .cursor { animation: blink 1s infinite; color: var(--verde); }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="badge">Primera en Latinoamérica — Abril 2026</div>
+  <h1>Desarrollo de software<br><span>completamente automatizado</span><br>con IA<span class="cursor">_</span></h1>
+  <p>
+    Un commit activa un pipeline que crea la tarea en Jira, la mueve entre carriles en tiempo real, abre el PR, hace el merge, construye la imagen, la despliega en Kubernetes y cierra la tarea. Solo.
+  </p>
+  <div class="firma">MSIRILDEV &mdash; Peru &mdash; 2026</div>
+</section>
+
+<!-- PIPELINE -->
+<section>
+  <div class="label">El flujo</div>
+  <h2>Un push. Cinco stages. Jira actualizado solo.</h2>
+
+  <div class="pipeline">
+
+    <div class="stage">
+      <div class="stage-dot">01<div class="stage-line"></div></div>
+      <div class="stage-content">
+        <div class="stage-title">git push feature/mi-cambio</div>
+        <div class="stage-desc">El developer hace push a su rama. Nada más. No abre Jira. No crea PR. No toca nada.</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-dot">02<div class="stage-line"></div></div>
+      <div class="stage-content">
+        <div class="stage-title">Stage 1 — Jira + Build</div>
+        <div class="stage-desc">El pipeline detecta si la rama tiene un SCRUM-NNN. Si lo tiene, toma esa tarjeta. Si no, crea una nueva en el Sprint activo.</div>
+        <div class="stage-jira">Jira: Por hacer → En curso</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-dot">03<div class="stage-line"></div></div>
+      <div class="stage-content">
+        <div class="stage-title">Stage 2 — Pull Request automático</div>
+        <div class="stage-desc">Se crea el PR hacia main automáticamente. El link del PR se comenta en la tarjeta de Jira.</div>
+        <div class="stage-jira">Jira: comentario con link del PR</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-dot">04<div class="stage-line"></div></div>
+      <div class="stage-content">
+        <div class="stage-title">Stage 3 — Merge automático</div>
+        <div class="stage-desc">El PR se mergea a main sin intervención humana. La tarjeta avanza.</div>
+        <div class="stage-jira">Jira: En curso → In Review</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-dot">05<div class="stage-line"></div></div>
+      <div class="stage-content">
+        <div class="stage-title">Stage 4 — Docker → Azure Container Registry</div>
+        <div class="stage-desc">Se construye la imagen Docker y se publica en ACR con tag del commit SHA. Se comenta en Jira.</div>
+        <div class="stage-jira">Jira: comentario con imagen publicada</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-dot">06</div>
+      <div class="stage-content">
+        <div class="stage-title">Stage 5 — Deploy → Azure Kubernetes Service</div>
+        <div class="stage-desc">La nueva imagen se despliega en AKS. Se espera el rollout. Si todo está verde, la tarjeta se cierra. Si algo falla, vuelve a Por hacer con el link al log.</div>
+        <div class="stage-jira">Jira: In Review → Listo ✓ (o → Por hacer si falla)</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ESCENARIOS -->
+<section>
+  <div class="label">Escenarios de uso</div>
+  <h2>Dos convenciones. Cero fricción.</h2>
+
+  <div class="scenarios">
+
+    <div class="scenario-card">
+      <h3>Escenario A — Tarea existente</h3>
+      <div class="code">git checkout -b feature/SCRUM-3-fix
+git push origin feature/SCRUM-3-fix</div>
+      <p>El pipeline detecta SCRUM-3 en el nombre de la rama y mueve esa tarjeta específica por todos los stages.</p>
+    </div>
+
+    <div class="scenario-card">
+      <h3>Escenario B — Tarea nueva</h3>
+      <div class="code">git checkout -b feature/nuevo-endpoint
+git push origin feature/nuevo-endpoint</div>
+      <p>No hay SCRUM-NNN. El pipeline crea automáticamente una nueva tarjeta en el Sprint activo y la mueve de principio a fin.</p>
+    </div>
+
+    <div class="scenario-card">
+      <h3>Escenario C — Fallo en producción</h3>
+      <div class="code">Stage 5: kubectl rollout → ERROR
+→ Jira: Listo → Por hacer
+→ Comentario: link al log exacto</div>
+      <p>Si el deploy falla, la tarjeta regresa a Por hacer automáticamente con el link directo al error en GitHub Actions.</p>
+    </div>
+
+    <div class="scenario-card">
+      <h3>Escenario D — Pipeline de voz (próximo)</h3>
+      <div class="code">"vamos a hacer el MVP 450"
+→ Claude crea SCRUM-450 en Jira
+→ Crea rama feature/SCRUM-450
+→ Pipeline completo se dispara</div>
+      <p>Activación por voz. Claude orquesta todo. El developer ni abre el navegador.</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- STACK -->
+<section>
+  <div class="label">Stack tecnológico</div>
+  <h2>Cada pieza tiene un propósito exacto.</h2>
+
+  <div class="stack-grid">
+    <div class="stack-item"><div class="tech">Java 21 + WebFlux</div><div class="role">Servicio reactivo — nunca bloqueante</div></div>
+    <div class="stack-item"><div class="tech">R2DBC + H2</div><div class="role">Persistencia reactiva en memoria</div></div>
+    <div class="stack-item"><div class="tech">Spring Boot 3.4</div><div class="role">Framework base del microservicio</div></div>
+    <div class="stack-item"><div class="tech">GitHub Actions</div><div class="role">Orquestador del pipeline CI/CD</div></div>
+    <div class="stack-item"><div class="tech">Azure ACR</div><div class="role">Registro de imágenes Docker</div></div>
+    <div class="stack-item"><div class="tech">Azure AKS</div><div class="role">Kubernetes en la nube</div></div>
+    <div class="stack-item"><div class="tech">Azure APIM</div><div class="role">Gateway con subscription key</div></div>
+    <div class="stack-item"><div class="tech">Jira REST API v3</div><div class="role">Transición automática de tarjetas</div></div>
+    <div class="stack-item"><div class="tech">Claude + MCP</div><div class="role">IA que orquesta todo el sistema</div></div>
+    <div class="stack-item"><div class="tech">Claude Empathy</div><div class="role">Voz, visión y emoción en el IDE</div></div>
+    <div class="stack-item"><div class="tech">Docker</div><div class="role">Contenedorización del servicio</div></div>
+    <div class="stack-item"><div class="tech">PAT Token + Secrets</div><div class="role">Seguridad del pipeline</div></div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section>
+  <div class="label">Impacto</div>
+  <h2>Números que lo dicen todo.</h2>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-num">0</div>
+      <div class="stat-label">Veces que el developer toca Jira manualmente</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">5</div>
+      <div class="stat-label">Stages que mueven la tarjeta automáticamente</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">1</div>
+      <div class="stat-label">Comando para activar todo: git push</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">#1</div>
+      <div class="stat-label">Primeros en implementarlo en Latinoamérica</div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="msirildev">MSIRILDEV</div>
+  <p>Alan Cairampoma &mdash; Peru &mdash; Abril 2026</p>
+  <p style="margin-top:0.5rem; color:#ffffff20; font-size:0.65rem;">
+    app-azure-cliente &bull; Spring WebFlux + R2DBC &bull; Azure AKS + ACR + APIM &bull; GitHub Actions + Jira
+  </p>
+</footer>
+
+</body>
+</html>
