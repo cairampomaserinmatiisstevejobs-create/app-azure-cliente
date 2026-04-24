@@ -1,0 +1,301 @@
+trigger:
+  branches:
+    include:
+      - feature/*
+
+variables:
+  - group: pipeline-secrets
+  - name: IMAGE
+    value: $(ACR_LOGIN_SERVER)/app-azure-cliente
+  - name: JIRA_BASE
+    value: $(JIRA_URL)/rest/api/3
+
+stages:
+
+  # ─── STAGE 1: Jira En curso + Build ────────────────────────────────────────
+  - stage: Build
+    displayName: "Stage 1 — Jira En curso + Build"
+    jobs:
+      - job: BuildJob
+        displayName: "Jira + Maven Build"
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - bash: |
+              FULL_BRANCH="$(Build.SourceBranch)"
+              BRANCH="$(Build.SourceBranchName)"
+              echo "Rama: $FULL_BRANCH"
+
+              # Detectar SCRUM-NNN en el nombre de la rama
+              ISSUE_KEY=$(echo "$FULL_BRANCH" | grep -oP 'SCRUM-\d+' | head -1)
+
+              if [ -z "$ISSUE_KEY" ]; then
+                echo "Sin SCRUM-NNN. Creando tarjeta nueva en Sprint $(SPRINT_ID)..."
+                TITLE=$(echo "$BRANCH" | tr '-' ' ' | python3 -c "import sys; print(sys.stdin.read().title().strip())")
+
+                RESPONSE=$(curl -s -X POST \
+                  "$(JIRA_BASE)/issue" \
+                  -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
+                  -H "Content-Type: application/json" \
+                  -d "{\"fields\":{\"project\":{\"key\":\"$(PROJECT_KEY)\"},\"summary\":\"$TITLE\",\"issuetype\":{\"name\":\"Historia\"},\"customfield_10020\":$(SPRINT_ID)}}")
+
+                ISSUE_KEY=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('key','ERROR'))")
+                echo "Tarjeta creada: $ISSUE_KEY"
+              else
+                echo "Tarjeta detectada: $ISSUE_KEY"
+              fi
+
+              # Publicar variable para siguientes stages
+              echo "##vso[task.setvariable variable=JIRA_KEY;isOutput=true]$ISSUE_KEY"
+
+              # Mover a En curso (ID: 21)
+              curl -s -o /dev/null -w "Transicion En curso: %{http_code}\n" -X POST \
+                "$(JIRA_BASE)/issue/$ISSUE_KEY/transitions" \
+                -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
+                -H "Content-Type: application/json" \
+                -d '{"transition":{"id":"21"}}'
+
+              # Comentario inicial
+              curl -s -o /dev/null -X POST \
+                "$(JIRA_BASE)/issue/$ISSUE_KEY/comment" \
+                -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
+                -H "Content-Type: application/json" \
+                -d "{\"body\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Pipeline Azure DevOps iniciado desde: $FULL_BRANCH — Build en progreso...\"}]}]}}"
+            displayName: "Detectar o crear tarjeta Jira"
+            name: jiraStep
+
+          - task: JavaToolInstaller@0
+            displayName: "Instalar Java 21"
+            inputs:
+              versionSpec: "21"
+              jdkArchitectureOption: x64
+              jdkSourceOption: PreInstalled
+
+          - bash: mvn package -DskipTests --no-transfer-progress
+            displayName: "Maven package"
+
+          - publish: $(System.DefaultWorkingDirectory)/target
+            artifact: app-jar
+            displayName: "Publicar JAR artifact"
+
+  # ─── STAGE 2: Crear Pull Request ───────────────────────────────────────────
+  - stage: CreatePR
+    displayName: "Stage 2 — Crear PR + Comentar Jira"
+    dependsOn: Build
+    variables:
+      JIRA_KEY: $[ stageDependencies.Build.BuildJob.outputs['jiraStep.JIRA_KEY'] ]
+    jobs:
+      - job: CreatePRJob
+        displayName: "Crear PR hacia main"
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - bash: |
+              BRANCH_NAME=$(echo "$(Build.SourceBranch)" | sed 's|refs/heads/||')
+              ISSUE_KEY="$(JIRA_KEY)"
+              # Build.Repository.Name ya viene como "owner/repo" en repos de GitHub
+              REPO="$(Build.Repository.Name)"
+              echo "Creando PR para rama: $BRANCH_NAME | Issue: $ISSUE_KEY | Repo: $REPO"
+
+              # Verificar si ya existe PR abierto en GitHub
+              EXISTING=$(gh pr list \
+                --head "$BRANCH_NAME" \
+                --base main \
+                --json number \
+                --jq '.[0].number' \
+                --repo "$REPO" 2>/dev/null || echo "")
+
+              if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+                echo "PR ya existe: #$EXISTING"
+                PR_ID="$EXISTING"
+                PR_URL="https://github.com/$REPO/pull/$PR_ID"
+              else
+                PR_URL=$(gh pr create \
+                  --base main \
+                  --head "$BRANCH_NAME" \
+                  --title "[$ISSUE_KEY] Auto PR: $BRANCH_NAME" \
+                  --body "Pipeline automatico Azure DevOps desde $BRANCH_NAME — $ISSUE_KEY MSIRILDEV" \
+                  --repo "$REPO")
+                PR_ID=$(echo "$PR_URL" | grep -o '[0-9]*$')
+                echo "PR creado: #$PR_ID — $PR_URL"
+              fi
+
+              if [ -z "$PR_ID" ]; then
+                echo "ERROR: No se pudo obtener PR_ID"
+                exit 1
+              fi
+
+              echo "##vso[task.setvariable variable=PR_ID;isOutput=true]$PR_ID"
+
+              # Comentar link del PR en Jira
+              curl -s -o /dev/null -X POST \
+                "$(JIRA_BASE)/issue/$ISSUE_KEY/comment" \
+                -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
+                -H "Content-Type: application/json" \
+                -d "{\"body\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Pull Request creado: $PR_URL\"}]}]}}"
+            displayName: "Crear PR automatico hacia main"
+            name: prStep
+            env:
+              GH_TOKEN: $(GH_PAT_TOKEN)
+
+  # ─── STAGE 3: Merge PR + Jira In Review ────────────────────────────────────
+  - stage: MergePR
+    displayName: "Stage 3 — Merge PR + Jira In Review"
+    dependsOn:
+      - Build
+      - CreatePR
+    variables:
+      JIRA_KEY: $[ stageDependencies.Build.BuildJob.outputs['jiraStep.JIRA_KEY'] ]
+      PR_ID: $[ stageDependencies.CreatePR.CreatePRJob.outputs['prStep.PR_ID'] ]
+    jobs:
+      - job: MergePRJob
+        displayName: "Merge y Jira In Review"
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - bash: |
+              PR_ID="$(PR_ID)"
+              REPO="$(Build.Repository.Name)"
+              echo "Mergeando PR #$PR_ID en repo $REPO..."
+              if [ -z "$PR_ID" ]; then
+                echo "ERROR: PR_ID vacio, no se puede mergear"
+                exit 1
+              fi
+              gh pr merge "$PR_ID" \
+                --merge \
+                --admin \
+                --repo "$REPO"
+            displayName: "Mergear PR en GitHub"
+            env:
+              GH_TOKEN: $(GH_PAT_TOKEN)
+
+          - bash: |
+              curl -s -o /dev/null -w "Transicion In Review: %{http_code}\n" -X POST \
+                "$(JIRA_BASE)/issue/$(JIRA_KEY)/transitions" \
+                -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
+                -H "Content-Type: application/json" \
+                -d '{"transition":{"id":"31"}}'
+            displayName: "Jira a In Review (ID 31)"
+
+  # ─── STAGE 4: Docker Build → ACR ───────────────────────────────────────────
+  - stage: DockerACR
+    displayName: "Stage 4 — Docker Build → ACR"
+    dependsOn:
+      - Build
+      - MergePR
+    variables:
+      JIRA_KEY: $[ stageDependencies.Build.BuildJob.outputs['jiraStep.JIRA_KEY'] ]
+    jobs:
+      - job: DockerACRJob
+        displayName: "Build y Push imagen a ACR"
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - download: current
+            artifact: app-jar
+
+          - bash: |
+              mkdir -p $(System.DefaultWorkingDirectory)/target
+              cp $(Pipeline.Workspace)/app-jar/*.jar $(System.DefaultWorkingDirectory)/target/
+            displayName: "Copiar JAR a target/"
+
+          - task: Docker@2
+            displayName: "Build y Push imagen Docker"
+            inputs:
+              command: buildAndPush
+              containerRegistry: acr-connection
+              repository: app-azure-cliente
+              dockerfile: $(Build.SourcesDirectory)/Dockerfile
+              tags: |
+                $(Build.SourceVersion)
+                latest
+
+          - bash: |
+              curl -s -o /dev/null -X POST \
+                "$(JIRA_BASE)/issue/$(JIRA_KEY)/comment" \
+                -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
+                -H "Content-Type: application/json" \
+                -d "{\"body\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Imagen Docker pusheada a ACR: $(IMAGE):$(Build.SourceVersion)\"}]}]}}"
+            displayName: "Comentar imagen en Jira"
+
+  # ─── STAGE 5: Deploy AKS + Jira Listo ──────────────────────────────────────
+  - stage: DeployAKS
+    displayName: "Stage 5 — Deploy AKS + Jira Listo"
+    dependsOn:
+      - Build
+      - DockerACR
+    variables:
+      JIRA_KEY: $[ stageDependencies.Build.BuildJob.outputs['jiraStep.JIRA_KEY'] ]
+    jobs:
+      - job: DeployAKSJob
+        displayName: "Deploy en AKS"
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: AzureCLI@2
+            displayName: "Obtener credenciales AKS"
+            inputs:
+              azureSubscription: azure-connection
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks get-credentials \
+                  --resource-group rg-app-azure-cliente \
+                  --name aks-app-cliente \
+                  --overwrite-existing
+
+          - task: AzureCLI@2
+            displayName: "Actualizar imagen en AKS"
+            inputs:
+              azureSubscription: azure-connection
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                kubectl set image deployment/app-azure-cliente \
+                  app-azure-cliente=$(IMAGE):$(Build.SourceVersion) \
+                  --namespace=default
+
+          - task: AzureCLI@2
+            displayName: "Esperar rollout"
+            inputs:
+              azureSubscription: azure-connection
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                kubectl rollout status deployment/app-azure-cliente \
+                  --namespace=default \
+                  --timeout=120s
+
+          - bash: |
+              curl -s -o /dev/null -w "Transicion Listo: %{http_code}\n" -X POST \
+                "$(JIRA_BASE)/issue/$(JIRA_KEY)/transitions" \
+                -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
+                -H "Content-Type: application/json" \
+                -d '{"transition":{"id":"41"}}'
+              curl -s -o /dev/null -X POST \
+                "$(JIRA_BASE)/issue/$(JIRA_KEY)/comment" \
+                -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
+                -H "Content-Type: application/json" \
+                -d "{\"body\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Deploy exitoso en AKS. Build: $(Build.BuildId) MSIRILDEV\"}]}]}}"
+            displayName: "Jira a Listo (ID 41)"
+            condition: succeeded()
+
+          - bash: |
+              curl -s -o /dev/null -X POST \
+                "$(JIRA_BASE)/issue/$(JIRA_KEY)/transitions" \
+                -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
+                -H "Content-Type: application/json" \
+                -d '{"transition":{"id":"11"}}'
+              curl -s -o /dev/null -X POST \
+                "$(JIRA_BASE)/issue/$(JIRA_KEY)/comment" \
+                -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
+                -H "Content-Type: application/json" \
+                -d "{\"body\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Pipeline fallido Stage 5 AKS. Build: $(Build.BuildId) — Logs: $(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)\"}]}]}}"
+            displayName: "Jira a Por hacer si falla (ID 11)"
+            condition: failed()
