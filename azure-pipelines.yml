@@ -155,7 +155,7 @@ stages:
               az repos pr update \
                 --id "$(PR_ID)" \
                 --status completed \
-                --merge-strategy noFastForward
+                --delete-source-branch false
             displayName: "Completar PR"
             env:
               AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
