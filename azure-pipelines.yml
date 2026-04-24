@@ -96,6 +96,7 @@ stages:
           - bash: |
               BRANCH_NAME=$(echo "$(Build.SourceBranch)" | sed 's|refs/heads/||')
               ISSUE_KEY="$(JIRA_KEY)"
+              # Build.Repository.Name ya viene como "owner/repo" en repos de GitHub
               REPO="$(Build.Repository.Name)"
               echo "Creando PR para rama: $BRANCH_NAME | Issue: $ISSUE_KEY | Repo: $REPO"
 
@@ -105,19 +106,19 @@ stages:
                 --base main \
                 --json number \
                 --jq '.[0].number' \
-                --repo "cairampomaserinmatiisstevejobs-create/$REPO" 2>/dev/null || echo "")
+                --repo "$REPO" 2>/dev/null || echo "")
 
               if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
                 echo "PR ya existe: #$EXISTING"
                 PR_ID="$EXISTING"
-                PR_URL="https://github.com/cairampomaserinmatiisstevejobs-create/$REPO/pull/$PR_ID"
+                PR_URL="https://github.com/$REPO/pull/$PR_ID"
               else
                 PR_URL=$(gh pr create \
                   --base main \
                   --head "$BRANCH_NAME" \
                   --title "[$ISSUE_KEY] Auto PR: $BRANCH_NAME" \
                   --body "Pipeline automatico Azure DevOps desde $BRANCH_NAME — $ISSUE_KEY MSIRILDEV" \
-                  --repo "cairampomaserinmatiisstevejobs-create/$REPO")
+                  --repo "$REPO")
                 PR_ID=$(echo "$PR_URL" | grep -o '[0-9]*$')
                 echo "PR creado: #$PR_ID — $PR_URL"
               fi
@@ -166,7 +167,7 @@ stages:
               gh pr merge "$PR_ID" \
                 --merge \
                 --admin \
-                --repo "cairampomaserinmatiisstevejobs-create/$REPO"
+                --repo "$REPO"
             displayName: "Mergear PR en GitHub"
             env:
               GH_TOKEN: $(GH_PAT_TOKEN)
