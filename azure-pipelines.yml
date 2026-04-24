@@ -115,16 +115,21 @@ stages:
                 echo "PR ya existe: #$EXISTING"
                 PR_ID="$EXISTING"
               else
-                PR_JSON=$(az repos pr create \
+                PR_ID=$(az repos pr create \
                   --source-branch "$BRANCH_NAME" \
                   --target-branch main \
                   --title "[$ISSUE_KEY] Auto PR: $BRANCH_NAME" \
                   --description "Pipeline automatico Azure DevOps desde $BRANCH_NAME — $ISSUE_KEY MSIRILDEV" \
                   --org "$ORG" \
                   --project "$PROJECT" \
-                  --output json)
-                PR_ID=$(echo "$PR_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['pullRequestId'])")
+                  --query "pullRequestId" \
+                  --output tsv)
                 echo "PR creado: #$PR_ID"
+              fi
+
+              if [ -z "$PR_ID" ]; then
+                echo "ERROR: No se pudo obtener PR_ID"
+                exit 1
               fi
 
               echo "##vso[task.setvariable variable=PR_ID;isOutput=true]$PR_ID"
@@ -158,15 +163,23 @@ stages:
           vmImage: ubuntu-latest
         steps:
           - bash: |
-              echo "Mergeando PR #$(PR_ID)..."
-              az repos pr update \
-                --id "$(PR_ID)" \
-                --status completed \
-                --delete-source-branch false \
-                --org "$(System.TeamFoundationCollectionUri)"
-            displayName: "Completar PR"
-            env:
-              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+              PR_ID="$(PR_ID)"
+              echo "Mergeando PR #$PR_ID..."
+              if [ -z "$PR_ID" ]; then
+                echo "ERROR: PR_ID vacio, no se puede mergear"
+                exit 1
+              fi
+              # Usar REST API directamente — mas confiable que az repos pr update
+              ORG_URL="$(System.TeamFoundationCollectionUri)"
+              PROJECT="$(System.TeamProject)"
+              REPO="$(Build.Repository.Name)"
+              B64_PAT=$(printf ":%s" "$(System.AccessToken)" | base64 -w0)
+              curl -s -o /dev/null -w "Merge HTTP: %{http_code}\n" -X PATCH \
+                "${ORG_URL}${PROJECT}/_apis/git/repositories/${REPO}/pullrequests/${PR_ID}?api-version=7.1" \
+                -H "Authorization: Basic $B64_PAT" \
+                -H "Content-Type: application/json" \
+                -d '{"status":"completed","completionOptions":{"mergeStrategy":"noFastForward","deleteSourceBranch":false}}'
+            displayName: "Completar PR via REST API"
 
           - bash: |
               curl -s -o /dev/null -w "Transicion In Review: %{http_code}\n" -X POST \
