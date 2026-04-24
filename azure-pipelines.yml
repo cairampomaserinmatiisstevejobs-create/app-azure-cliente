@@ -96,35 +96,30 @@ stages:
           - bash: |
               BRANCH_NAME=$(echo "$(Build.SourceBranch)" | sed 's|refs/heads/||')
               ISSUE_KEY="$(JIRA_KEY)"
-              echo "Creando PR para rama: $BRANCH_NAME | Issue: $ISSUE_KEY"
+              REPO="$(Build.Repository.Name)"
+              echo "Creando PR para rama: $BRANCH_NAME | Issue: $ISSUE_KEY | Repo: $REPO"
 
-              ORG="$(System.TeamFoundationCollectionUri)"
-              PROJECT="$(System.TeamProject)"
+              # Verificar si ya existe PR abierto en GitHub
+              EXISTING=$(gh pr list \
+                --head "$BRANCH_NAME" \
+                --base main \
+                --json number \
+                --jq '.[0].number' \
+                --repo "cairampomaserinmatiisstevejobs-create/$REPO" 2>/dev/null || echo "")
 
-              # Verificar si ya existe PR abierto
-              EXISTING=$(az repos pr list \
-                --source-branch "$BRANCH_NAME" \
-                --target-branch main \
-                --status active \
-                --query "[0].pullRequestId" \
-                --output tsv \
-                --org "$ORG" \
-                --project "$PROJECT" 2>/dev/null || echo "")
-
-              if [ -n "$EXISTING" ] && [ "$EXISTING" != "None" ]; then
+              if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
                 echo "PR ya existe: #$EXISTING"
                 PR_ID="$EXISTING"
+                PR_URL="https://github.com/cairampomaserinmatiisstevejobs-create/$REPO/pull/$PR_ID"
               else
-                PR_ID=$(az repos pr create \
-                  --source-branch "$BRANCH_NAME" \
-                  --target-branch main \
+                PR_URL=$(gh pr create \
+                  --base main \
+                  --head "$BRANCH_NAME" \
                   --title "[$ISSUE_KEY] Auto PR: $BRANCH_NAME" \
-                  --description "Pipeline automatico Azure DevOps desde $BRANCH_NAME — $ISSUE_KEY MSIRILDEV" \
-                  --org "$ORG" \
-                  --project "$PROJECT" \
-                  --query "pullRequestId" \
-                  --output tsv)
-                echo "PR creado: #$PR_ID"
+                  --body "Pipeline automatico Azure DevOps desde $BRANCH_NAME — $ISSUE_KEY MSIRILDEV" \
+                  --repo "cairampomaserinmatiisstevejobs-create/$REPO")
+                PR_ID=$(echo "$PR_URL" | grep -o '[0-9]*$')
+                echo "PR creado: #$PR_ID — $PR_URL"
               fi
 
               if [ -z "$PR_ID" ]; then
@@ -133,8 +128,6 @@ stages:
               fi
 
               echo "##vso[task.setvariable variable=PR_ID;isOutput=true]$PR_ID"
-
-              PR_URL="$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_git/$(Build.Repository.Name)/pullrequest/$PR_ID"
 
               # Comentar link del PR en Jira
               curl -s -o /dev/null -X POST \
@@ -145,7 +138,7 @@ stages:
             displayName: "Crear PR automatico hacia main"
             name: prStep
             env:
-              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+              GH_TOKEN: $(GH_PAT_TOKEN)
 
   # ─── STAGE 3: Merge PR + Jira In Review ────────────────────────────────────
   - stage: MergePR
@@ -164,25 +157,19 @@ stages:
         steps:
           - bash: |
               PR_ID="$(PR_ID)"
-              echo "Mergeando PR #$PR_ID..."
+              REPO="$(Build.Repository.Name)"
+              echo "Mergeando PR #$PR_ID en repo $REPO..."
               if [ -z "$PR_ID" ]; then
                 echo "ERROR: PR_ID vacio, no se puede mergear"
                 exit 1
               fi
-              ORG_URL="$(System.TeamFoundationCollectionUri)"
-              PROJECT="$(System.TeamProject)"
-              REPO="$(Build.Repository.Name)"
-              HTTP=$(curl -s -o /tmp/merge_response.json -w "%{http_code}" -X PATCH \
-                "${ORG_URL}${PROJECT}/_apis/git/repositories/${REPO}/pullrequests/${PR_ID}?api-version=7.1" \
-                -H "Authorization: Bearer $SYSTEM_ACCESSTOKEN" \
-                -H "Content-Type: application/json" \
-                -d '{"status":"completed","completionOptions":{"mergeStrategy":"noFastForward","deleteSourceBranch":false}}')
-              echo "Merge HTTP: $HTTP"
-              cat /tmp/merge_response.json
-              if [ "$HTTP" != "200" ]; then exit 1; fi
-            displayName: "Completar PR via REST API"
+              gh pr merge "$PR_ID" \
+                --merge \
+                --admin \
+                --repo "cairampomaserinmatiisstevejobs-create/$REPO"
+            displayName: "Mergear PR en GitHub"
             env:
-              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+              GH_TOKEN: $(GH_PAT_TOKEN)
 
           - bash: |
               curl -s -o /dev/null -w "Transicion In Review: %{http_code}\n" -X POST \
