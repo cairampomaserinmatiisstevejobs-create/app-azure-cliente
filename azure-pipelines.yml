@@ -67,9 +67,12 @@ stages:
             displayName: "Detectar o crear tarjeta Jira"
             name: jiraStep
 
-          - bash: |
-              java -version 2>&1 || sudo apt-get install -y openjdk-21-jdk
-            displayName: "Verificar Java"
+          - task: JavaToolInstaller@0
+            displayName: "Instalar Java 21"
+            inputs:
+              versionSpec: "21"
+              jdkArchitectureOption: x64
+              jdkSourceOption: PreInstalled
 
           - bash: mvn package -DskipTests --no-transfer-progress
             displayName: "Maven package"
