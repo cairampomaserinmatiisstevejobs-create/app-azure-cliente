@@ -1,4 +1,4 @@
-name: Pipeline — Feature → PR → Merge → ACR → AKS
+name: Pipeline — Feature → Jira → PR → Merge → ACR → AKS
 
 on:
   push:
@@ -11,16 +11,76 @@ permissions:
 
 env:
   IMAGE: ${{ secrets.ACR_LOGIN_SERVER }}/app-azure-cliente
+  JIRA_BASE: ${{ secrets.JIRA_URL }}/rest/api/3
+  JIRA_AUTH: ${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_TOKEN }}
+  SPRINT_ID: "1"
+  PROJECT_KEY: "SCRUM"
 
 jobs:
 
-  # ─── STAGE 1: Compilar y validar ────────────────────────────────────────────
+  # ─── STAGE 1: Jira + Build ────────────────────────────────────────────────
   build:
-    name: "Stage 1 — Build & Validate"
+    name: "Stage 1 — Jira En curso + Build"
     runs-on: ubuntu-latest
+    outputs:
+      jira_key: ${{ steps.jira.outputs.jira_key }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Detectar o crear tarjeta Jira
+        id: jira
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          echo "Rama: $BRANCH"
+
+          # Buscar SCRUM-NNN en el nombre de la rama
+          ISSUE_KEY=$(echo "$BRANCH" | grep -oP 'SCRUM-\d+' | head -1)
+
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "No se encontro issue key en la rama. Creando tarjeta nueva en Sprint $SPRINT_ID..."
+
+            # Titulo basado en la rama (quitar feature/ y guiones)
+            TITLE=$(echo "$BRANCH" | sed 's|feature/||' | tr '-' ' ' | sed 's/\b\(.\)/\u\1/g')
+
+            RESPONSE=$(curl -s -X POST \
+              "${{ env.JIRA_BASE }}/issue" \
+              -u "${{ env.JIRA_AUTH }}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"fields\": {
+                  \"project\": {\"key\": \"$PROJECT_KEY\"},
+                  \"summary\": \"$TITLE\",
+                  \"issuetype\": {\"name\": \"Historia\"},
+                  \"customfield_10020\": $SPRINT_ID
+                }
+              }")
+
+            ISSUE_KEY=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('key',''))")
+            echo "Tarjeta creada: $ISSUE_KEY"
+          else
+            echo "Tarjeta existente detectada: $ISSUE_KEY"
+          fi
+
+          echo "jira_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+
+          # Mover a En curso (ID: 21)
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "${{ env.JIRA_BASE }}/issue/$ISSUE_KEY/transitions" \
+            -u "${{ env.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d '{"transition": {"id": "21"}}')
+          echo "Jira transicion En curso: HTTP $HTTP"
+
+          # Comentario de inicio
+          curl -s -o /dev/null -X POST \
+            "${{ env.JIRA_BASE }}/issue/$ISSUE_KEY/comment" \
+            -u "${{ env.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"body\": {\"type\": \"doc\", \"version\": 1, \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Pipeline iniciado desde rama: $BRANCH - Build en progreso...\"}]}]}}"
 
       - name: Setup Java 21
         uses: actions/setup-java@v4
@@ -39,45 +99,56 @@ jobs:
           path: target/*.jar
           retention-days: 1
 
-  # ─── STAGE 2: Crear Pull Request automático ──────────────────────────────────
+  # ─── STAGE 2: Crear Pull Request ─────────────────────────────────────────
   create-pr:
-    name: "Stage 2 — Crear PR → main"
+    name: "Stage 2 — Crear PR + Comentar Jira"
     runs-on: ubuntu-latest
     needs: build
     outputs:
       pr_number: ${{ steps.pr.outputs.pr_number }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Crear PR automático hacia main
+      - name: Crear PR automatico hacia main
         id: pr
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           BRANCH="${GITHUB_REF_NAME}"
+          ISSUE_KEY="${{ needs.build.outputs.jira_key }}"
+
           EXISTING=$(gh pr list --head "$BRANCH" --base main --json number --jq '.[0].number' 2>/dev/null || echo "")
           if [ -n "$EXISTING" ]; then
             echo "PR ya existe: #$EXISTING"
             echo "pr_number=$EXISTING" >> $GITHUB_OUTPUT
+            PR_URL="https://github.com/${{ github.repository }}/pull/$EXISTING"
           else
-            PR=$(gh pr create \
+            PR_URL=$(gh pr create \
               --base main \
               --head "$BRANCH" \
-              --title "Auto PR: $BRANCH" \
-              --body "Pipeline automático desde rama $BRANCH — MSIRILDEV")
-            NUMBER=$(echo "$PR" | grep -o '[0-9]*$')
-            echo "PR creado: #$NUMBER"
+              --title "[$ISSUE_KEY] Auto PR: $BRANCH" \
+              --body "Pipeline automatico desde $BRANCH - $ISSUE_KEY MSIRILDEV")
+            NUMBER=$(echo "$PR_URL" | grep -o '[0-9]*$')
             echo "pr_number=$NUMBER" >> $GITHUB_OUTPUT
           fi
 
-  # ─── STAGE 3: Merge automático ───────────────────────────────────────────────
+          # Comentar en Jira con el link del PR
+          curl -s -o /dev/null -X POST \
+            "${{ env.JIRA_BASE }}/issue/$ISSUE_KEY/comment" \
+            -u "${{ env.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"body\": {\"type\": \"doc\", \"version\": 1, \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Pull Request creado: $PR_URL\"}]}]}}"
+
+  # ─── STAGE 3: Merge + Jira In Review ─────────────────────────────────────
   merge-pr:
-    name: "Stage 3 — Merge PR → main"
+    name: "Stage 3 — Merge PR + Jira In Review"
     runs-on: ubuntu-latest
-    needs: create-pr
+    needs: [build, create-pr]
+
     steps:
       - name: Merge PR
         env:
@@ -88,11 +159,22 @@ jobs:
             --admin \
             --repo ${{ github.repository }}
 
-  # ─── STAGE 4: Docker Build & Push ACR ───────────────────────────────────────
+      - name: Jira a In Review (ID 31)
+        run: |
+          ISSUE_KEY="${{ needs.build.outputs.jira_key }}"
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "${{ env.JIRA_BASE }}/issue/$ISSUE_KEY/transitions" \
+            -u "${{ env.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d '{"transition": {"id": "31"}}')
+          echo "Jira transicion In Review: HTTP $HTTP"
+
+  # ─── STAGE 4: Docker Build → ACR ─────────────────────────────────────────
   docker-push:
     name: "Stage 4 — Docker Build → ACR"
     runs-on: ubuntu-latest
-    needs: merge-pr
+    needs: [build, merge-pr]
+
     steps:
       - name: Checkout main (post-merge)
         uses: actions/checkout@v4
@@ -121,11 +203,21 @@ jobs:
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
 
-  # ─── STAGE 5: Deploy AKS ─────────────────────────────────────────────────────
+      - name: Comentar en Jira imagen pusheada
+        run: |
+          ISSUE_KEY="${{ needs.build.outputs.jira_key }}"
+          curl -s -o /dev/null -X POST \
+            "${{ env.JIRA_BASE }}/issue/$ISSUE_KEY/comment" \
+            -u "${{ env.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"body\": {\"type\": \"doc\", \"version\": 1, \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Imagen Docker pusheada a ACR: ${{ env.IMAGE }}:${{ github.sha }}\"}]}]}}"
+
+  # ─── STAGE 5: Deploy AKS + Jira Listo ────────────────────────────────────
   deploy-aks:
-    name: "Stage 5 — Deploy → AKS"
+    name: "Stage 5 — Deploy AKS + Jira Listo"
     runs-on: ubuntu-latest
-    needs: docker-push
+    needs: [build, docker-push]
+
     steps:
       - name: Azure Login
         uses: azure/login@v2
@@ -149,3 +241,34 @@ jobs:
           kubectl rollout status deployment/app-azure-cliente \
             --namespace=default \
             --timeout=120s
+
+      - name: Jira a Listo (ID 41)
+        if: success()
+        run: |
+          ISSUE_KEY="${{ needs.build.outputs.jira_key }}"
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "${{ env.JIRA_BASE }}/issue/$ISSUE_KEY/transitions" \
+            -u "${{ env.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d '{"transition": {"id": "41"}}')
+          echo "Jira transicion Listo: HTTP $HTTP"
+          curl -s -o /dev/null -X POST \
+            "${{ env.JIRA_BASE }}/issue/$ISSUE_KEY/comment" \
+            -u "${{ env.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"body\": {\"type\": \"doc\", \"version\": 1, \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Deploy exitoso en AKS. Commit: ${{ github.sha }} MSIRILDEV\"}]}]}}"
+
+      - name: Jira a Por hacer si falla (ID 11)
+        if: failure()
+        run: |
+          ISSUE_KEY="${{ needs.build.outputs.jira_key }}"
+          curl -s -o /dev/null -X POST \
+            "${{ env.JIRA_BASE }}/issue/$ISSUE_KEY/transitions" \
+            -u "${{ env.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d '{"transition": {"id": "11"}}'
+          curl -s -o /dev/null -X POST \
+            "${{ env.JIRA_BASE }}/issue/$ISSUE_KEY/comment" \
+            -u "${{ env.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"body\": {\"type\": \"doc\", \"version\": 1, \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Pipeline fallido en Stage 5 AKS. Revisar logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}]}]}}"
