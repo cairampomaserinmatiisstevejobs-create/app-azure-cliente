@@ -46,6 +46,11 @@ jobs:
             # Titulo basado en la rama (quitar feature/ y guiones)
             TITLE=$(echo "$BRANCH" | sed 's|feature/||' | tr '-' ' ' | sed 's/\b\(.\)/\u\1/g')
 
+            # Obtener accountId del usuario autenticado para asignar la tarjeta
+            ACCOUNT_ID=$(curl -s "${{ env.JIRA_BASE }}/myself" \
+              -u "${{ env.JIRA_AUTH }}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('accountId',''))")
+            echo "Asignando a accountId: $ACCOUNT_ID"
+
             RESPONSE=$(curl -s -X POST \
               "${{ env.JIRA_BASE }}/issue" \
               -u "${{ env.JIRA_AUTH }}" \
@@ -55,7 +60,8 @@ jobs:
                   \"project\": {\"key\": \"$PROJECT_KEY\"},
                   \"summary\": \"$TITLE\",
                   \"issuetype\": {\"name\": \"Historia\"},
-                  \"customfield_10020\": $SPRINT_ID
+                  \"customfield_10020\": $SPRINT_ID,
+                  \"assignee\": {\"accountId\": \"$ACCOUNT_ID\"}
                 }
               }")
 
