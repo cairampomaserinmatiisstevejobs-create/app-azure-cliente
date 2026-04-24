@@ -169,17 +169,20 @@ stages:
                 echo "ERROR: PR_ID vacio, no se puede mergear"
                 exit 1
               fi
-              # Usar REST API directamente — mas confiable que az repos pr update
               ORG_URL="$(System.TeamFoundationCollectionUri)"
               PROJECT="$(System.TeamProject)"
               REPO="$(Build.Repository.Name)"
-              B64_PAT=$(printf ":%s" "$(System.AccessToken)" | base64 -w0)
-              curl -s -o /dev/null -w "Merge HTTP: %{http_code}\n" -X PATCH \
+              HTTP=$(curl -s -o /tmp/merge_response.json -w "%{http_code}" -X PATCH \
                 "${ORG_URL}${PROJECT}/_apis/git/repositories/${REPO}/pullrequests/${PR_ID}?api-version=7.1" \
-                -H "Authorization: Basic $B64_PAT" \
+                -H "Authorization: Bearer $SYSTEM_ACCESSTOKEN" \
                 -H "Content-Type: application/json" \
-                -d '{"status":"completed","completionOptions":{"mergeStrategy":"noFastForward","deleteSourceBranch":false}}'
+                -d '{"status":"completed","completionOptions":{"mergeStrategy":"noFastForward","deleteSourceBranch":false}}')
+              echo "Merge HTTP: $HTTP"
+              cat /tmp/merge_response.json
+              if [ "$HTTP" != "200" ]; then exit 1; fi
             displayName: "Completar PR via REST API"
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
           - bash: |
               curl -s -o /dev/null -w "Transicion In Review: %{http_code}\n" -X POST \
