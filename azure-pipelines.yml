@@ -36,11 +36,16 @@ stages:
                 echo "Sin SCRUM-NNN. Creando tarjeta nueva en Sprint $(SPRINT_ID)..."
                 TITLE=$(echo "$BRANCH" | tr '-' ' ' | python3 -c "import sys; print(sys.stdin.read().title().strip())")
 
+                # Obtener accountId del usuario autenticado para asignar la tarjeta
+                ACCOUNT_ID=$(curl -s "$(JIRA_BASE)/myself" \
+                  -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" | python3 -c "import sys,json; print(json.load(sys.stdin).get('accountId',''))")
+                echo "Asignando a accountId: $ACCOUNT_ID"
+
                 RESPONSE=$(curl -s -X POST \
                   "$(JIRA_BASE)/issue" \
                   -u "$(JIRA_EMAIL):$(JIRA_TOKEN)" \
                   -H "Content-Type: application/json" \
-                  -d "{\"fields\":{\"project\":{\"key\":\"$(PROJECT_KEY)\"},\"summary\":\"$TITLE\",\"issuetype\":{\"name\":\"Historia\"},\"customfield_10020\":$(SPRINT_ID)}}")
+                  -d "{\"fields\":{\"project\":{\"key\":\"$(PROJECT_KEY)\"},\"summary\":\"$TITLE\",\"issuetype\":{\"name\":\"Historia\"},\"customfield_10020\":$(SPRINT_ID),\"assignee\":{\"accountId\":\"$ACCOUNT_ID\"}}}")
 
                 ISSUE_KEY=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('key','ERROR'))")
                 echo "Tarjeta creada: $ISSUE_KEY"
