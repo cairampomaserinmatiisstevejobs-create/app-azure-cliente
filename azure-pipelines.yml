@@ -163,8 +163,7 @@ stages:
                 --id "$(PR_ID)" \
                 --status completed \
                 --delete-source-branch false \
-                --org "$(System.TeamFoundationCollectionUri)" \
-                --project "$(System.TeamProject)"
+                --org "$(System.TeamFoundationCollectionUri)"
             displayName: "Completar PR"
             env:
               AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
